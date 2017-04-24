@@ -498,6 +498,7 @@ class GeoElevationFile:
         return elevation/weights
 
     def get_elevation_from_row_and_column(self, row, column):
+        """ Returns elevation stored in (row, column) """
         assert row < self.square_side
         assert column < self.square_side
 
@@ -506,9 +507,13 @@ class GeoElevationFile:
         return self.data[row][column]
 
     def set_writable(self):
+        """ Sets data to writeable. Not usually required, therefore placed in extra method """
+
         self.data.setflags('writeable', True)
 
     def set_elevation_to_row_and_column(self, row, column, elevation):
+        """ Sets elevation stored in (row, column) to specified value. Requires call to set_writable() first"""
+
         assert row < self.square_side
         assert column < self.square_side
         assert self.data.flags.writeable
