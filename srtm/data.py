@@ -22,6 +22,7 @@ import logging as mod_logging
 import math as mod_math
 import re as mod_re
 import struct as mod_struct
+import numpy as mod_np
 
 from . import utils as mod_utils
 
@@ -207,8 +208,7 @@ class GeoElevationData:
 
 
         if mode == 'array':
-            import numpy as np
-            array = np.empty((height,width))
+            array = mod_np.empty((height, width))
             for row in range(height):
                 for column in range(width):
                     latitude  = latitude_from  + float(row) / height * (latitude_to  - latitude_from)
@@ -344,10 +344,18 @@ class GeoElevationFile:
         self.data = data
 
         square_side = mod_math.sqrt(len(self.data) / 2.)
-        assert square_side == int(square_side), 'Invalid file size: {0} for file {1}'.format(len(self.data), self.file_name)
+        assert square_side == int(square_side), 'Invalid file size: {0} for file {1}'.format(len(self.data),
+                                                                                             self.file_name)
 
         self.resolution = 1.0 / (square_side - 1)
         self.square_side = int(square_side)
+
+        # convert raw data into numpy array
+        self.data = mod_np.frombuffer(data, mod_np.dtype('>i2'), self.square_side * self.square_side).reshape(
+            (self.square_side, self.square_side))
+
+        # delete raw buffer
+        del data
 
     def get_row_and_column(self, latitude, longitude):
         return mod_math.floor((self.latitude + 1 - latitude) * float(self.square_side - 1)), \
@@ -490,20 +498,12 @@ class GeoElevationFile:
         return elevation/weights
 
     def get_elevation_from_row_and_column(self, row, column):
-        i = row * (self.square_side) + column
-        assert i < len(self.data) - 1
+        assert row < self.square_side
+        assert column < self.square_side
 
-        #mod_logging.debug('{0}, {1} -> {2}'.format(row, column, i))
+        # mod_logging.debug('{0}, {1} -> {2}'.format(row, column, i))
 
-        unpacked = mod_struct.unpack(">h", self.data[i * 2 : i * 2 + 2])
-        result = None
-        if unpacked and len(unpacked) == 1:
-            result = unpacked[0]
-
-        if (result is None) or result > 10000 or result < -1000:
-            return None
-
-        return result
+        return self.data[row][column]
 
     def parse_file_name_starting_position(self):
         """ Returns (latitude, longitude) of lower left point of the file """
