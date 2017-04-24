@@ -505,9 +505,13 @@ class GeoElevationFile:
 
         return self.data[row][column]
 
+    def set_writable(self):
+        self.data.setflags('writeable', True)
+
     def set_elevation_to_row_and_column(self, row, column, elevation):
         assert row < self.square_side
         assert column < self.square_side
+        assert self.data.flags.writeable
 
         # mod_logging.debug('{0}, {1} -> {2}'.format(row, column, i))
 
