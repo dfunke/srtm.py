@@ -534,5 +534,8 @@ class GeoElevationFile:
         self.latitude = latitude
         self.longitude = longitude
 
+    def save_to_file(self, filename):
+        self.data.tofile(filename)
+
     def __str__(self):
         return '[{0}:{1}]'.format(self.__class__, self.file_name)
