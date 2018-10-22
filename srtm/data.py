@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-Classess containing parsed elevation data.
+Classes containing parsed elevation data.
 """
 
 import logging as mod_logging
@@ -41,7 +41,7 @@ class GeoElevationData:
     files = None
 
     def __init__(self, srtm1_files, srtm3_files, leave_zipped=False,
-                 file_handler=None):
+                 file_handler=None, batch_mode=False):
         self.srtm1_files = srtm1_files
         self.srtm3_files = srtm3_files
 
@@ -50,6 +50,8 @@ class GeoElevationData:
         self.file_handler = file_handler if file_handler else mod_utils.FileHandler()
 
         self.files = {}
+
+        self.batch_mode = batch_mode
 
     def get_elevation(self, latitude, longitude, approximate=None):
         geo_elevation_file = self.get_file(float(latitude), float(longitude))
@@ -61,9 +63,34 @@ class GeoElevationData:
             return None
 
         return geo_elevation_file.get_elevation(
-                float(latitude),
-                float(longitude),
-                approximate)
+            float(latitude),
+            float(longitude),
+            approximate)
+
+    def _IDW(self, latitude, longitude, radius=1):
+        """
+        Return the interpolated elevation at a point.
+
+        Load the correct tile for latitude and longitude given.
+        If the tile doesn't exist, return None. Otherwise,
+        call the tile's Inverse Distance Weighted function and
+        return the elevation.
+
+        Args:
+            latitude: float with the latitude in decimal degrees
+            longitude: float with the longitude in decimal degrees
+            radius: int of 1 or 2 indicating the approximate radius
+                of adjacent cells to include
+
+        Returns:
+            a float of the interpolated elevation with the same unit
+            as the .hgt file (meters)
+
+        """
+        tile = self.get_file(latitude, longitude)
+        if tile is None:
+            return None
+        return tile._InverseDistanceWeighted(latitude, longitude, radius)
 
     def get_file(self, latitude, longitude):
         """
@@ -82,7 +109,13 @@ class GeoElevationData:
                 return None
 
             result = GeoElevationFile(file_name, data, self)
-            self.files[file_name] = result
+
+            # Store file (if in batch mode, just keep most recent)
+            if self.batch_mode:
+                self.files = {file_name: result}
+            else:
+                self.files[file_name] = result
+
             return result
 
     def retrieve_or_load_file_data(self, file_name):
@@ -151,7 +184,7 @@ class GeoElevationData:
 
         return file_name
 
-    def get_image(self, size, latitude_interval, longitude_interval, max_elevation,
+    def get_image(self, size, latitude_interval, longitude_interval, max_elevation, min_elevation=0,
                   unknown_color = (255, 255, 255, 255), zero_color = (0, 0, 255, 255),
                   min_color = (0, 0, 0, 255), max_color = (0, 255, 0, 255),
                   mode='image'):
@@ -179,7 +212,7 @@ class GeoElevationData:
             for row in range(height):
                 for column in range(width):
                     latitude  = latitude_from  + float(row) / height * (latitude_to  - latitude_from)
-                    longitude = longitude_from + float(column) / height * (longitude_to - longitude_from)
+                    longitude = longitude_from + float(column) / width * (longitude_to - longitude_from)
                     elevation = self.get_elevation(latitude, longitude)
                     array[row,column] = elevation
 
@@ -195,15 +228,17 @@ class GeoElevationData:
                               (255, 255, 255, 255))
             draw = mod_imagedraw.Draw(image)
 
+            max_elevation -= min_elevation
+
             for row in range(height):
                 for column in range(width):
                     latitude  = latitude_from  + float(row) / height * (latitude_to  - latitude_from)
-                    longitude = longitude_from + float(column) / height * (longitude_to - longitude_from)
+                    longitude = longitude_from + float(column) / width * (longitude_to - longitude_from)
                     elevation = self.get_elevation(latitude, longitude)
                     if elevation == None:
                         color = unknown_color
                     else:
-                        elevation_coef = elevation / float(max_elevation)
+                        elevation_coef = (elevation - min_elevation) / float(max_elevation)
                         if elevation_coef < 0: elevation_coef = 0
                         if elevation_coef > 1: elevation_coef = 1
                         color = mod_utils.get_color_between(min_color, max_color, elevation_coef)
@@ -230,7 +265,9 @@ class GeoElevationData:
             self._add_sampled_elevations(gpx)
         else:
             for point in gpx.walk(only_points=True):
-                point.elevation = self.get_elevation(point.latitude, point.longitude)
+                ele = self.get_elevation(point.latitude, point.longitude)
+                if ele is not None:
+                    point.elevation = ele
 
         for i in range(gpx_smooth_no):
             gpx.smooth(vertical=True, horizontal=False)
@@ -325,9 +362,9 @@ class GeoElevationFile:
         If approximate is True then only the points from SRTM grid will be
         used, otherwise a basic aproximation of nearby points will be calculated.
         """
-        if not (self.latitude <= latitude < self.latitude + 1):
+        if not (self.latitude - self.resolution <= latitude < self.latitude + 1):
             raise Exception('Invalid latitude %s for file %s' % (latitude, self.file_name))
-        if not (self.longitude <= longitude < self.longitude + 1):
+        if not (self.longitude <= longitude < self.longitude + 1 + self.resolution):
             raise Exception('Invalid longitude %s for file %s' % (longitude, self.file_name))
 
         row, column = self.get_row_and_column(latitude, longitude)
@@ -359,7 +396,7 @@ class GeoElevationFile:
 
         importance_4 = d_meters - mod_utils.distance(latitude, longitude - d, latitude, longitude)
         elevation_4  = self.geo_elevation_data.get_elevation(latitude, longitude - d, approximate=False)
-        # TODO(TK) Check if coordinates inside the same file, and only the decide if to xall
+        # TODO(TK) Check if coordinates inside the same file, and only then decide if to call
         # self.geo_elevation_data.get_elevation or just self.get_elevation
 
         if elevation_1 == None or elevation_2 == None or elevation_3 == None or elevation_4 == None:
@@ -374,7 +411,7 @@ class GeoElevationFile:
         # Normalize importance:
         sum_importances = float(importance_1 + importance_2 + importance_3 + importance_4)
 
-        # Check normallization:
+        # Check normalization:
         assert abs(importance_1 / sum_importances + \
                    importance_2 / sum_importances + \
                    importance_3 / sum_importances + \
@@ -386,6 +423,71 @@ class GeoElevationFile:
                importance_4 / sum_importances * elevation_4
 
         return result
+
+    def _InverseDistanceWeighted(self, latitude, longitude, radius=1):
+        """
+        Return the Inverse Distance Weighted Elevation.
+
+        Interpolate the elevation of the given point using the inverse
+        distance weigthing algorithm (exp of 1) in the form:
+            sum((1/distance) * elevation)/sum(1/distance)
+            for each point in the matrix.
+        The matrix size is determined by the radius. A radius of 1 uses
+        5 points and a radius of 2 uses 13 points. The matrices are set
+        up to use cells adjacent to and including the one that contains
+        the given point. Any cells referenced by the matrix that are on
+        neighboring tiles are ignored.
+
+        Args:
+            latitude: float of the latitude in decimal degrees
+            longitude: float of the longitude in decimal degrees
+            radius: int of 1 or 2 indicating the size of the matrix
+
+        Returns:
+            a float of the interpolated elevation in the same units as
+            the underlying .hgt file (meters)
+
+        Exceptions:
+            raises a ValueError if an invalid radius is supplied
+
+        """
+        if radius == 1:
+            offsetmatrix = (None, (0, 1), None,
+                           (-1, 0), (0, 0), (1, 0),
+                           None, (0, -1), None)
+
+        elif radius == 2:
+            offsetmatrix = (None, None, (0, 2), None, None,
+                            None, (-1, 1), (0, 1), (1, 1), None,
+                            (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0),
+                            None, (-1, -1), (0, -1), (1, -1), None,
+                            None, None, (0, -2), None, None)
+        else:
+            raise ValueError("Radius {} invalid, "
+                             "expected 1 or 2".format(radius))
+
+        row, column = self.get_row_and_column(latitude, longitude)
+        center_lat, center_long = self.get_lat_and_long(row, column)
+        if latitude == center_lat and longitude == center_long:
+            # return direct elev at point (infinite weight)
+            return self.get_elevation_from_row_and_column(int(row), int(column))
+        weights = 0
+        elevation = 0
+
+        for offset in offsetmatrix:
+            if (offset is not None and
+                0 <= row + offset[0] < self.square_side and
+                0 <= column + offset[1] < self.square_side):
+                cell = self.get_elevation_from_row_and_column(int(row + offset[0]),
+                                                              int(column + offset[1]))
+                if cell is not None:
+                    # does not need to be meters, anything proportional
+                    distance = mod_utils.distance(latitude, longitude,
+                                                  center_lat + float(offset[0])/(self.square_side-1),
+                                                  center_long + float(offset[1])/(self.square_side-1))
+                    weights += 1/distance
+                    elevation += cell/distance
+        return elevation/weights
 
     def get_elevation_from_row_and_column(self, row, column):
         i = row * (self.square_side) + column
