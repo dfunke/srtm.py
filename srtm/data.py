@@ -497,6 +497,73 @@ class GeoElevationFile:
                     elevation += cell/distance
         return elevation/weights
 
+    def _InverseDistanceWeightedRC(self, row, column, radius=1):
+        """
+        Return the Inverse Distance Weighted Elevation.
+
+        Interpolate the elevation of the given row and column using the inverse
+        distance weigthing algorithm (exp of 1) in the form:
+            sum((1/distance) * elevation)/sum(1/distance)
+            for each point in the matrix.
+        The matrix size is determined by the radius. A radius of 1 uses
+        5 points and a radius of 2 uses 13 points. The matrices are set
+        up to use cells adjacent to and including the one that contains
+        the given point. Any cells referenced by the matrix that are on
+        neighboring tiles are ignored.
+
+        Args:
+            row: int row
+            column: int column
+            radius: int of 1 or 2 indicating the size of the matrix
+
+        Returns:
+            a float of the interpolated elevation in the same units as
+            the underlying .hgt file (meters)
+
+        Exceptions:
+            raises a ValueError if an invalid radius is supplied
+
+        """
+        if radius == 1:
+            offsetmatrix = (None, (0, 1), None,
+                           (-1, 0), (0, 0), (1, 0),
+                           None, (0, -1), None)
+
+        elif radius == 2:
+            offsetmatrix = (None, None, (0, 2), None, None,
+                            None, (-1, 1), (0, 1), (1, 1), None,
+                            (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0),
+                            None, (-1, -1), (0, -1), (1, -1), None,
+                            None, None, (0, -2), None, None)
+        else:
+            raise ValueError("Radius {} invalid, "
+                             "expected 1 or 2".format(radius))
+
+        center_lat, center_long = self.get_lat_and_long(row, column)
+        undef = True
+        weights = 0
+        elevation = 0
+
+        for offset in offsetmatrix:
+            if (offset is not None and
+                    0 <= row + offset[0] < self.square_side and
+                    0 <= column + offset[1] < self.square_side):
+                cell = self.get_elevation_from_row_and_column(int(row + offset[0]),
+                                                              int(column + offset[1]))
+                if cell is not None:
+                    # does not need to be meters, anything proportional
+                    distance = mod_utils.distance(center_lat, center_long,
+                                                  center_lat + float(offset[0])/(self.square_side-1),
+                                                  center_long + float(offset[1])/(self.square_side-1))
+                    weights += 1/(distance if distance > 0 else 1)
+                    elevation += cell/(distance if distance > 0 else 1)
+                    undef = False
+
+        if not undef:
+            return elevation/weights
+        else:
+            return None
+
     def get_elevation_from_row_and_column(self, row, column):
         """ Returns elevation stored in (row, column) """
         assert row < self.square_side
