@@ -504,7 +504,12 @@ class GeoElevationFile:
 
         # mod_logging.debug('{0}, {1} -> {2}'.format(row, column, i))
 
-        return self.data[row][column]
+        result  = self.data[row][column]
+        if (result is None) or result > 10000 or result < -1000:
+            return None
+        else:
+            return result
+
 
     def set_writable(self):
         """ Sets data to writeable. Not usually required, therefore placed in extra method """
