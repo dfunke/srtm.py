@@ -484,8 +484,8 @@ class GeoElevationFile:
 
         for offset in offsetmatrix:
             if (offset is not None and
-                0 <= row + offset[0] < self.square_side and
-                0 <= column + offset[1] < self.square_side):
+                    0 <= row + offset[0] < self.square_side and
+                    0 <= column + offset[1] < self.square_side):
                 cell = self.get_elevation_from_row_and_column(int(row + offset[0]),
                                                               int(column + offset[1]))
                 if cell is not None:
