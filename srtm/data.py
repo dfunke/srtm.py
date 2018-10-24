@@ -357,6 +357,19 @@ class GeoElevationFile:
         # delete raw buffer
         del data
 
+    def smooth_data(self, radius=1):
+
+        smoothed = mod_np.empty((self.square_side, self.square_side))
+        smoothed.setflags('writeable', True)
+
+        for row in range(1, self.square_side):
+            for col in range(1, self.square_side):
+                smoothed[row][col] = self._InverseDistanceWeightedRC(row, col,radius) or self.data[row][col]
+
+        smoothed.setflags('writeable', False)
+        self.data = smoothed
+
+
     def get_row_and_column(self, latitude, longitude):
         return mod_math.floor((self.latitude + 1 - latitude) * float(self.square_side - 1)), \
                mod_math.floor((longitude - self.longitude) * float(self.square_side - 1))
