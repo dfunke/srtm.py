@@ -20,8 +20,8 @@ import re             as mod_re
 
 def retrieve_all_files_urls(url):
     mod_logging.info('Retrieving {0}'.format(url))
-    url_stream = mod_urllib.urlopen(url)
-    contents = url_stream.read()
+    url_stream = mod_urllib.request.urlopen(url)
+    contents = url_stream.read().decode('utf-8')
     url_stream.close()
 
     url_candidates = mod_re.findall('href="(.*?)"', contents)
@@ -37,8 +37,8 @@ def retrieve_all_files_urls(url):
 
 def get_files(url):
     mod_logging.info('Retrieving {0}'.format(url))
-    url_stream = mod_urllib.urlopen(url)
-    contents = url_stream.read()
+    url_stream = mod_urllib.request.urlopen(url)
+    contents = url_stream.read().decode('utf-8')
     url_stream.close()
 
     result = {}

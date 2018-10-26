@@ -93,7 +93,7 @@ def _get_urls(use_included_urls, file_handler):
         srtm3_files = mod_retriever.retrieve_all_files_urls(SRTM3_URL)
 
         file_handler.write(files_list_file_name,
-                           mod_json.dumps({'srtm1': srtm1_files, 'srtm3': srtm3_files}, sort_keys=True, indent=4))
+                           mod_json.dumps({'srtm1': srtm1_files, 'srtm3': srtm3_files}, sort_keys=True, indent=4), mode='t')
 
         return srtm1_files, srtm3_files
 
@@ -131,10 +131,10 @@ class FileHandler:
     def exists(self, file_name):
         return mod_path.exists('%s/%s' % (self.get_srtm_dir(), file_name))
 
-    def write(self, file_name, contents):
-        with open('%s/%s' % (self.get_srtm_dir(), file_name), 'wb') as f:
+    def write(self, file_name, contents, mode='b'):
+        with open('%s/%s' % (self.get_srtm_dir(), file_name), 'w' + mode) as f:
             f.write(contents)
 
-    def read(self, file_name):
-        with open('%s/%s' % (self.get_srtm_dir(), file_name), 'rb') as f:
+    def read(self, file_name, mode='b'):
+        with open('%s/%s' % (self.get_srtm_dir(), file_name), 'r' + mode) as f:
             return f.read()
